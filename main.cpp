@@ -1,4 +1,9 @@
 #include "geometry.h"
+#include <chrono>
+#include <fstream>
+
+#include "cow.h"
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -13,15 +18,20 @@ struct Vertex {
 
 const float alpha = 45.f * M_PI / 180.f;
 const float beta = 45.f * M_PI / 180.f;
-const Vec3<float> camera_position = Vec3<float>(0, 0, 1);
+const Vec3<float> camera_position = Vec3<float>(0, 1, 1);
 const float near_clip = abs(camera_position.z);
 const Vec3<float> camera_orientation = Vec3<float>(0, 0, 0);
-const Vec2<uint32_t> image_size = Vec2<uint32_t>(240, 240);
+const uint32_t image_width = 200;
+const uint32_t image_height = 200;
+float z_buffer[image_height][image_width];
+
+const uint32_t ntris = 3156;
+
 const Vec2<float> canvas_size =
     Vec2<float>(2. * tan(alpha) * near_clip, 2. * tan(beta) * near_clip);
 
 Vec3<float> pointGlobalToNormal(Vec3<float> point_global, float near_clip, Vec2<float> canvas_size,
-                                Vec2<uint32_t> image_size) {
+                                uint32_t image_width, uint32_t image_height) {
 
     // translate global point via camera position
     Vec3<float> point_global_translated = point_global - camera_position;
@@ -82,8 +92,8 @@ std::pair<Vec2<uint32_t>, bool> pointNormalToRaster(Vec3<float> point_norm_pos) 
 
     // Convert to raster
     Vec2<uint32_t> point_rast_pos;
-    point_rast_pos.x = std::floor(point_norm_pos.x * image_size.x);
-    point_rast_pos.y = std::floor((1 - point_norm_pos.y) * image_size.y);
+    point_rast_pos.x = std::floor(point_norm_pos.x * image_width);
+    point_rast_pos.y = std::floor((1 - point_norm_pos.y) * image_height);
     // We don't use the z value yet
 
     return std::make_pair(point_rast_pos, out_of_bounds);
@@ -122,6 +132,7 @@ std::vector<Vertex> trianglePoints(Vec3<Vertex> triangle, uint32_t img_width, ui
 
     // Pixel center points inside triangle
     std::vector<Vertex> tri_points;
+
     // Loop through points in bounding box points
     for (float x = start_x; x <= bottom_right.x; x += pixel_width) {
         for (float y = start_y; y <= top_left.y; y += pixel_height) {
@@ -131,18 +142,24 @@ std::vector<Vertex> trianglePoints(Vec3<Vertex> triangle, uint32_t img_width, ui
             float w1 = edgeFunction(triangle[2].pos, triangle[0].pos, p);
             float w2 = edgeFunction(triangle[0].pos, triangle[1].pos, p);
 
-            if (w0 >= 0 && w1 >= 0 && w2 >= 0) {
-                w0 /= area;
-                w1 /= area;
-                w2 /= area;
-                float r =
-                    (w0 * triangle[0].rgb.x + w1 * triangle[1].rgb.x + w2 * triangle[2].rgb.x);
-                float g =
-                    (w0 * triangle[0].rgb.y + w1 * triangle[1].rgb.y + w2 * triangle[2].rgb.y);
-                float b =
-                    (w0 * triangle[0].rgb.z + w1 * triangle[1].rgb.z + w2 * triangle[2].rgb.z);
+            float z = 1 / ((w0 / triangle[0].pos.z) + (w1 / triangle[1].pos.z) +
+                           (w2 / triangle[2].pos.z));
 
-                tri_points.push_back((Vertex){.pos = p, .rgb = {r, g, b}});
+            if (w0 >= 0 && w1 >= 0 && w2 >= 0) {
+                if (z_buffer[(int)(y * img_height)][(int)(x * img_width)] >= z) {
+                    z_buffer[(int)(y * img_height)][(int)(x * img_width)] = z;
+                    w0 /= area;
+                    w1 /= area;
+                    w2 /= area;
+                    float r =
+                        (w0 * triangle[0].rgb.x + w1 * triangle[1].rgb.x + w2 * triangle[2].rgb.x);
+                    float g =
+                        (w0 * triangle[0].rgb.y + w1 * triangle[1].rgb.y + w2 * triangle[2].rgb.y);
+                    float b =
+                        (w0 * triangle[0].rgb.z + w1 * triangle[1].rgb.z + w2 * triangle[2].rgb.z);
+
+                    tri_points.push_back((Vertex){.pos = p, .rgb = {r, g, b}});
+                }
             }
         }
     }
@@ -152,26 +169,39 @@ std::vector<Vertex> trianglePoints(Vec3<Vertex> triangle, uint32_t img_width, ui
 
 int main(int argc, char **argv) {
     std::vector<Vec3<Vertex>> triangles;
-    // Start with a global point
+
+    // Read in cow.h vertices
+    // for (uint i = 0; i < ntris; ++i) {
+    //     Vec3<float> &v0 = vertices[nvertices[i * 3]];
+    //     Vec3<float> &v1 = vertices[nvertices[i * 3 + 1]];
+    //     Vec3<float> &v2 = vertices[nvertices[i * 3 + 2]];
+
+    //     Vertex vertex_0 = (Vertex){.pos = v0, .rgb = {1.f, 0, 0}};
+    //     Vertex vertex_1 = (Vertex){.pos = v1, .rgb = {1.f, 0, 0}};
+    //     Vertex vertex_2 = (Vertex){.pos = v2, .rgb = {1.f, 0, 0}};
+
+    //     triangles.push_back(Vec3<Vertex>(vertex_0, vertex_1, vertex_2));
+    // }
+
+    // Use custom triangles
     triangles.push_back({
-        (Vertex){.pos = Vec3<float>(0, 0, -5), .rgb = Vec3<float>(1, 0, 0)},
-        (Vertex){.pos = Vec3<float>(0, 0.5, -5), .rgb = Vec3<float>(1, 0, 0)},
-        (Vertex){.pos = Vec3<float>(0.5, 0, -5), .rgb = Vec3<float>(1, 0, 0)},
+        (Vertex){.pos = Vec3<float>(-0.5f, 0.f, -1.f), .rgb = Vec3<float>(1, 0, 0)},
+        (Vertex){.pos = Vec3<float>(0, 0.5f, -1.5), .rgb = Vec3<float>(0, 1, 0)},
+        (Vertex){.pos = Vec3<float>(0.5, 0, -2), .rgb = Vec3<float>(0, 0, 1)},
     });
     triangles.push_back({
-        (Vertex){.pos = Vec3<float>(0, 0, -1), .rgb = Vec3<float>(0, 1, 0)},
-        (Vertex){.pos = Vec3<float>(0.5, 0.5, -1), .rgb = Vec3<float>(0, 1, 0)},
-        (Vertex){.pos = Vec3<float>(0.5, 0, -1), .rgb = Vec3<float>(0, 1, 0)},
+        (Vertex){.pos = Vec3<float>(-0.5, 0, -2), .rgb = Vec3<float>(1, 1, 0)},
+        (Vertex){.pos = Vec3<float>(0, 0.5, -1.5), .rgb = Vec3<float>(0, 1, 1)},
+        (Vertex){.pos = Vec3<float>(0.5, 0, -1), .rgb = Vec3<float>(1, 0, 1)},
     });
 
-    Vec3<unsigned char> *frameBuffer = new Vec3<unsigned char>[image_size.x * image_size.y];
+    Vec3<unsigned char> *frameBuffer = new Vec3<unsigned char>[image_width * image_height];
 
-    for (uint32_t i = 0; i < image_size.x * image_size.y; ++i)
+    for (uint32_t i = 0; i < image_width * image_height; ++i)
         frameBuffer[i] = Vec3<unsigned char>(255);
 
-    float z_buffer[image_size.y][image_size.x];
-    for (int i = 0; i < image_size.y; i++) {
-        for (int j = 0; j < image_size.x; j++) {
+    for (int i = 0; i < image_height; i++) {
+        for (int j = 0; j < image_width; j++) {
             z_buffer[i][j] = std::numeric_limits<float>::infinity();
         }
     }
@@ -180,39 +210,38 @@ int main(int argc, char **argv) {
 
         Vec3<Vertex> triangle_normal = {
             (Vertex){
-                .pos = pointGlobalToNormal(triangle.x.pos, near_clip, canvas_size, image_size),
+                .pos = pointGlobalToNormal(triangle.x.pos, near_clip, canvas_size, image_width,
+                                           image_height),
                 triangle.x.rgb,
             },
             (Vertex){
-                .pos = pointGlobalToNormal(triangle.y.pos, near_clip, canvas_size, image_size),
+                .pos = pointGlobalToNormal(triangle.y.pos, near_clip, canvas_size, image_width,
+                                           image_height),
                 .rgb = triangle.y.rgb,
             },
             (Vertex){
-                .pos = pointGlobalToNormal(triangle.z.pos, near_clip, canvas_size, image_size),
+                .pos = pointGlobalToNormal(triangle.z.pos, near_clip, canvas_size, image_width,
+                                           image_height),
                 .rgb = triangle.z.rgb,
             }};
 
-        auto tri_points = trianglePoints(triangle_normal, image_size.x, image_size.y);
+        auto tri_points = trianglePoints(triangle_normal, image_width, image_height);
 
         for (auto p : tri_points) {
             Vec2<uint32_t> p_r;
             bool out_of_bounds;
             std::tie(p_r, out_of_bounds) = pointNormalToRaster(p.pos);
             if (!out_of_bounds) {
-                std::cout << p.pos.z << std::endl;
-                if (z_buffer[p_r.y][p_r.x] >= p.pos.z) {
-                    frameBuffer[p_r.x + p_r.y * image_size.y] =
-                        Vec3<unsigned char>(255 * p.rgb.x, 255 * p.rgb.y, 255 * p.rgb.z);
-                    z_buffer[p_r.y][p_r.x] = p.pos.z;
-                }
+                frameBuffer[p_r.x + p_r.y * image_height] =
+                    Vec3<unsigned char>(255 * p.rgb.x, 255 * p.rgb.y, 255 * p.rgb.z);
             }
         }
     }
 
     std::ofstream ofs;
     ofs.open("./output.ppm");
-    ofs << "P6\n" << image_size.x << " " << image_size.y << "\n255\n";
-    ofs.write((char *)frameBuffer, image_size.x * image_size.y * 3);
+    ofs << "P6\n" << image_width << " " << image_height << "\n255\n";
+    ofs.write((char *)frameBuffer, image_width * image_height * 3);
     ofs.close();
 
     delete[] frameBuffer;
