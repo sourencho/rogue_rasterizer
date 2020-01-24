@@ -17,5 +17,5 @@ open output.ppm
 
 ### Todo
 
-- [] Perspective correct vertex attribute interpolation (color)
-- [] Import color from .obj files instead of assigning random colors
+- [ ] Perspective correct vertex attribute interpolation (color)
+- [ ] Import color from .obj files instead of assigning random colors
