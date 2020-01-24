@@ -1,5 +1,4 @@
 #include "../include/geometry.h"
-#include "../include/loader.h"
 
 #include <algorithm>
 #include <chrono>

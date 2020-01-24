@@ -31,3 +31,11 @@
 *.out
 *.app
 
+# clang
+.clang-format
+
+# vscode
+.vscode
+
+# mac
+.DS_STORE
