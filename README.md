@@ -1,6 +1,8 @@
 # rogue_rasterizer
 
-A simple software rasterizer written for learning using this tutorial [Scratchapixel: Rasterization Practical Implementation](https://www.scratchapixel.com/lessons/3d-basic-rendering/rasterization-practical-implementation)
+A simple software rasterizer written for learning purposes using the tutorial [Scratchapixel: Rasterization Practical Implementation](https://www.scratchapixel.com/lessons/3d-basic-rendering/rasterization-practical-implementation).
+
+Authors: [@hwacha](https://github.com/hwacha) and [@sourenp](https://github.com/Sourenp)
 
 ### Run
 
