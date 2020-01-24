@@ -1,11 +1,13 @@
-#include "../include/geometry.h"
-
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <fstream>
 #include <math.h>
 #include <vector>
+
+#include "../include/geometry.h"
+#include "../include/loader.h"
+#include "../include/utils.h"
 
 struct Vertex {
     Vec3<float> pos;
@@ -14,16 +16,15 @@ struct Vertex {
 
 const float alpha = 45.f * M_PI / 180.f;
 const float beta = 45.f * M_PI / 180.f;
-const Vec3<float> camera_position = Vec3<float>(1.5, 2, 2);
+
+const Vec3<float> camera_position = Vec3<float>(9, 6, 12);
+const Vec3<float> camera_orientation = Vec3<float>(0, 45.f * M_PI / 180.f, 0);
 
 const float near_clip = camera_position.z + 1;
-const Vec3<float> camera_orientation = Vec3<float>(0, 0, 0);
-const uint32_t image_width = 200;
-const uint32_t image_height = 200;
+const uint32_t image_width = 600;
+const uint32_t image_height = 600;
 float z_buffer[image_height][image_width];
 Vec3<unsigned char> *frame_buffer = new Vec3<unsigned char>[image_width * image_height];
-
-const uint32_t ntris = 3156;
 
 const Vec2<float> canvas_size =
     Vec2<float>(2. * tan(alpha) * near_clip, 2. * tan(beta) * near_clip);
@@ -185,100 +186,46 @@ std::vector<Vertex> trianglePoints(Vec3<Vertex> triangle, uint32_t img_width, ui
 }
 
 int main(int argc, char **argv) {
+
+    if (argc != 2) {
+        std::cerr << "Usage: " << argv[0] << " <geo_file_path>" << std::endl;
+        return 1;
+    }
+
+    // Read in geometry file
+    uint32_t ntris;
+    std::unique_ptr<Vec3f[]> vertices;
+    std::unique_ptr<Vec2f[]> st;
+    std::unique_ptr<uint32_t[]> nvertices;
+
+    scratch::loader::loadGeoFile(argv[1], ntris, vertices, st, nvertices);
+    fprintf(stderr, "Geometry file read ok!\n");
+
     std::vector<Vec3<Vertex>> triangles;
 
-    // Read in cow.h vertices
-    // for (uint i = 0; i < ntris; ++i) {
-    //     Vec3<float> &v0 = vertices[nvertices[i * 3]];
-    //     Vec3<float> &v1 = vertices[nvertices[i * 3 + 1]];
-    //     Vec3<float> &v2 = vertices[nvertices[i * 3 + 2]];
+    // Create list of triangles
+    for (uint i = 0; i < ntris; ++i) {
+        Vec3<float> &v0 = vertices[nvertices[i * 3]];
+        Vec3<float> &v1 = vertices[nvertices[i * 3 + 1]];
+        Vec3<float> &v2 = vertices[nvertices[i * 3 + 2]];
 
-    //     Vertex vertex_0 =
-    //         (Vertex){.pos = v0,
-    //                  .rgb = {(float)rand() / (float)RAND_MAX, (float)rand() / (float)RAND_MAX,
-    //                          (float)rand() / (float)RAND_MAX}};
-    //     Vertex vertex_1 =
-    //         (Vertex){.pos = v1,
-    //                  .rgb = {(float)rand() / (float)RAND_MAX, (float)rand() / (float)RAND_MAX,
-    //                          (float)rand() / (float)RAND_MAX}};
-    //     Vertex vertex_2 =
-    //         (Vertex){.pos = v2,
-    //                  .rgb = {(float)rand() / (float)RAND_MAX, (float)rand() / (float)RAND_MAX,
-    //                          (float)rand() / (float)RAND_MAX}};
+        Vertex vertex_0 =
+            (Vertex){.pos = v0,
+                     .rgb = {(float)rand() / (float)RAND_MAX, (float)rand() / (float)RAND_MAX,
+                             (float)rand() / (float)RAND_MAX}};
+        Vertex vertex_1 =
+            (Vertex){.pos = v1,
+                     .rgb = {(float)rand() / (float)RAND_MAX, (float)rand() / (float)RAND_MAX,
+                             (float)rand() / (float)RAND_MAX}};
+        Vertex vertex_2 =
+            (Vertex){.pos = v2,
+                     .rgb = {(float)rand() / (float)RAND_MAX, (float)rand() / (float)RAND_MAX,
+                             (float)rand() / (float)RAND_MAX}};
 
-    //     triangles.push_back(Vec3<Vertex>(vertex_0, vertex_1, vertex_2));
-    // }
+        triangles.push_back(Vec3<Vertex>(vertex_0, vertex_1, vertex_2));
+    }
 
-    // Use custom triangles
-
-    // CROSS
-    // triangles.push_back({
-    //     (Vertex){.pos = Vec3<float>(-0.5f, 0.f, -1.f), .rgb = Vec3<float>(1, 0, 1)},
-    //     (Vertex){.pos = Vec3<float>(0, 0.5f, -1.5), .rgb = Vec3<float>(1, 1, 0)},
-    //     (Vertex){.pos = Vec3<float>(0.5, 0, -2), .rgb = Vec3<float>(0, 1, 1)},
-    // });
-    // triangles.push_back({
-    //     (Vertex){.pos = Vec3<float>(-0.5, 0, -2), .rgb = Vec3<float>(1, 0, 0)},
-    //     (Vertex){.pos = Vec3<float>(0, 0.5, -1.5), .rgb = Vec3<float>(0, 0, 1)},
-    //     (Vertex){.pos = Vec3<float>(0.5, 0, -1), .rgb = Vec3<float>(0, 1, 0)},
-    // });
-
-    // CUBE
-
-    // back
-    triangles.push_back({
-        (Vertex){.pos = Vec3<float>(0, 0, -1), .rgb = Vec3<float>(1, 0, 0)},
-        (Vertex){.pos = Vec3<float>(0, 1, -1), .rgb = Vec3<float>(1, 0, 0)},
-        (Vertex){.pos = Vec3<float>(1, 0, -1), .rgb = Vec3<float>(1, 0, 0)},
-    });
-    triangles.push_back({
-        (Vertex){.pos = Vec3<float>(0, 1, -1), .rgb = Vec3<float>(1, 0, 0)},
-        (Vertex){.pos = Vec3<float>(1, 1, -1), .rgb = Vec3<float>(1, 0, 0)},
-        (Vertex){.pos = Vec3<float>(1, 0, -1), .rgb = Vec3<float>(1, 0, 0)},
-    });
-
-    // left
-    triangles.push_back({
-        (Vertex){.pos = Vec3<float>(0, 1, -1), .rgb = Vec3<float>(1, 0, 1)},
-        (Vertex){.pos = Vec3<float>(0, 0, -1), .rgb = Vec3<float>(1, 0, 1)},
-        (Vertex){.pos = Vec3<float>(0, 0, 0), .rgb = Vec3<float>(1, 0, 1)},
-
-    });
-    triangles.push_back({
-        (Vertex){.pos = Vec3<float>(0, 1, 0), .rgb = Vec3<float>(1, 0, 1)},
-        (Vertex){.pos = Vec3<float>(0, 1, -1), .rgb = Vec3<float>(1, 0, 1)},
-        (Vertex){.pos = Vec3<float>(0, 0, 0), .rgb = Vec3<float>(1, 0, 1)},
-
-    });
-
-    // right
-    triangles.push_back({
-        (Vertex){.pos = Vec3<float>(1, 0, 0), .rgb = Vec3<float>(1, 0, 1)},
-        (Vertex){.pos = Vec3<float>(1, 0, -1), .rgb = Vec3<float>(0, 1, 1)},
-        (Vertex){.pos = Vec3<float>(1, 1, -1), .rgb = Vec3<float>(0, 0, 1)},
-    });
-
-    triangles.push_back({
-        (Vertex){.pos = Vec3<float>(1, 1, -1), .rgb = Vec3<float>(0, 0, 1)},
-        (Vertex){.pos = Vec3<float>(1, 1, 0), .rgb = Vec3<float>(0, 1, 1)},
-        (Vertex){.pos = Vec3<float>(1, 0, 0), .rgb = Vec3<float>(1, 0, 1)},
-
-    });
-
-    // bottom
-    triangles.push_back({
-        (Vertex){.pos = Vec3<float>(0, 0, 0), .rgb = Vec3<float>(0, 1, 1)},
-        (Vertex){.pos = Vec3<float>(1, 0, -1), .rgb = Vec3<float>(0, 1, 1)},
-        (Vertex){.pos = Vec3<float>(1, 0, 0), .rgb = Vec3<float>(0, 1, 1)},
-    });
-
-    triangles.push_back({
-        (Vertex){.pos = Vec3<float>(0, 0, 0), .rgb = Vec3<float>(0, 1, 1)},
-        (Vertex){.pos = Vec3<float>(0, 0, -1), .rgb = Vec3<float>(0, 1, 1)},
-        (Vertex){.pos = Vec3<float>(1, 0, -1), .rgb = Vec3<float>(0, 1, 1)},
-
-    });
-
+    // Preload buffer values
     for (uint32_t i = 0; i < image_width * image_height; ++i)
         frame_buffer[i] = Vec3<unsigned char>(255);
 
