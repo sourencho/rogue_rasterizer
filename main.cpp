@@ -18,13 +18,14 @@ struct Vertex {
 
 const float alpha = 45.f * M_PI / 180.f;
 const float beta = 45.f * M_PI / 180.f;
-const Vec3<float> camera_position = Vec3<float>(14, 10, 10);
+const Vec3<float> camera_position = Vec3<float>(1.5, 2, 2);
 
 const float near_clip = camera_position.z + 1;
-const Vec3<float> camera_orientation = Vec3<float>(0, 45.f * M_PI / 180.f, 0);
-const uint32_t image_width = 2000;
-const uint32_t image_height = 2000;
+const Vec3<float> camera_orientation = Vec3<float>(0, 0, 0);
+const uint32_t image_width = 200;
+const uint32_t image_height = 200;
 float z_buffer[image_height][image_width];
+Vec3<unsigned char> *frame_buffer = new Vec3<unsigned char>[image_width * image_height];
 
 const uint32_t ntris = 3156;
 
@@ -74,7 +75,7 @@ Vec3<float> pointGlobalToNormal(Vec3<float> point_global, float near_clip, Vec2<
     point_ndc_pos.y = (2.f * point_screen_pos.y / (t - b)) - ((t + b) / (t - b));
     point_ndc_pos.z = point_screen_pos.z;
 
-    // Normalize to 0-1
+    // Convert to [0,1) normal space
     Vec3<float> point_norm_pos;
     point_norm_pos.x = (point_ndc_pos.x + 1.) / 2.;
     point_norm_pos.y = (point_ndc_pos.y + 1.) / 2.;
@@ -104,7 +105,7 @@ float edgeFunction(const Vec3<float> &a, const Vec3<float> &b, const Vec3<float>
 }
 
 /**
- * Returns the pixels inside a triangle.
+ * Returns the pixels inside a triangle in [0, 1) normal coordinates.
  */
 std::vector<Vertex> trianglePoints(Vec3<Vertex> triangle, uint32_t img_width, uint32_t img_height) {
     // Bounding box
@@ -120,6 +121,7 @@ std::vector<Vertex> trianglePoints(Vec3<Vertex> triangle, uint32_t img_width, ui
     float pixel_width = 1.f / img_width;
     float pixel_height = 1.f / img_height;
 
+    // Start of pixel center coordinates inside bounding box
     int start_x_floor;
     remquo(top_left.x, pixel_width, &start_x_floor);
     float start_x = start_x_floor * pixel_width + 0.5 * pixel_width;
@@ -128,7 +130,7 @@ std::vector<Vertex> trianglePoints(Vec3<Vertex> triangle, uint32_t img_width, ui
     remquo(bottom_right.y, pixel_height, &start_y_floor);
     float start_y = start_y_floor * pixel_height + 0.5 * pixel_height;
 
-    // Pixel center points inside triangle
+    // Stores all the pixels positions inside the triangle
     std::vector<Vertex> tri_points;
 
     // Loop through points in bounding box points
@@ -140,48 +142,42 @@ std::vector<Vertex> trianglePoints(Vec3<Vertex> triangle, uint32_t img_width, ui
             Vec3f BC = Vec3f(triangle[2].pos.x, triangle[2].pos.y, 0) +
                        Vec3f(-triangle[1].pos.x, -triangle[1].pos.y, 0);
 
-            // checking if point is inside traingle
             Vec3<float> p(x, y, triangle[0].pos.z);
 
-            float w0, w1, w2, z, r, g, b, area = 0.f;
-            bool inside;
+            // We must rotate counter clockwise over the triangle for the edge function if the
+            // normal is inversed
+            bool triangle_normal_inversed = AB.crossProduct(BC).z <= 0.f;
+            const Vertex &vertex_a = triangle_normal_inversed ? triangle[0] : triangle[1];
+            const Vertex &vertex_b = triangle_normal_inversed ? triangle[1] : triangle[0];
+            const Vertex &vertex_c = triangle[2];
 
-            // Consider normal of triangle relative to camera and rotate counter clockwise if
-            // inversed
-            if (AB.crossProduct(BC).z <= 0.f) {
-                area = edgeFunction(triangle[0].pos, triangle[1].pos, triangle[2].pos);
-                w0 = edgeFunction(triangle[1].pos, triangle[2].pos, p);
-                w1 = edgeFunction(triangle[2].pos, triangle[0].pos, p);
-                w2 = edgeFunction(triangle[0].pos, triangle[1].pos, p);
-                w0 /= area;
-                w1 /= area;
-                w2 /= area;
-                z = 1 / ((w0 / triangle[0].pos.z) + (w1 / triangle[1].pos.z) +
-                         (w2 / triangle[2].pos.z));
-                inside = w0 >= 0 && w1 >= 0 && w2 >= 0;
-                r = (w0 * triangle[0].rgb.x + w1 * triangle[1].rgb.x + w2 * triangle[2].rgb.x);
-                g = (w0 * triangle[0].rgb.y + w1 * triangle[1].rgb.y + w2 * triangle[2].rgb.y);
-                b = (w0 * triangle[0].rgb.z + w1 * triangle[1].rgb.z + w2 * triangle[2].rgb.z);
-            } else {
-                area = edgeFunction(triangle[0].pos, triangle[2].pos, triangle[1].pos);
-                w0 = edgeFunction(triangle[0].pos, triangle[2].pos, p);
-                w1 = edgeFunction(triangle[2].pos, triangle[1].pos, p);
-                w2 = edgeFunction(triangle[1].pos, triangle[0].pos, p);
-                z = -1 / ((w0 / triangle[1].pos.z) + (w1 / triangle[0].pos.z) +
-                          (w2 / triangle[2].pos.z));
-                inside = (w0 >= 0 && w1 >= 0 && w2 >= 0);
-                w0 /= area;
-                w1 /= area;
-                w2 /= area;
-                r = (w0 * triangle[1].rgb.x + w1 * triangle[0].rgb.x + w2 * triangle[2].rgb.x);
-                g = (w0 * triangle[1].rgb.y + w1 * triangle[0].rgb.y + w2 * triangle[2].rgb.y);
-                b = (w0 * triangle[1].rgb.z + w1 * triangle[0].rgb.z + w2 * triangle[2].rgb.z);
-            }
+            float area = edgeFunction(vertex_a.pos, vertex_b.pos, vertex_c.pos);
+            float w0 = edgeFunction(vertex_b.pos, vertex_c.pos, p);
+            float w1 = edgeFunction(vertex_c.pos, vertex_a.pos, p);
+            float w2 = edgeFunction(vertex_a.pos, vertex_b.pos, p);
 
-            if (inside) {
+            // If the point is inside the triangle
+            if (w0 >= 0 && w1 >= 0 && w2 >= 0) {
+                // If the point is inside the screen
                 if (x >= 0 && x < 1.0 && y >= 0 && y < 1.0) {
-                    if (z_buffer[(int)(y * img_height)][(int)(x * img_width)] >= z) {
-                        z_buffer[(int)(y * img_height)][(int)(x * img_width)] = z;
+                    // Interpolate z value
+                    w0 /= area;
+                    w1 /= area;
+                    w2 /= area;
+                    float z =
+                        1 / ((w0 / vertex_a.pos.z) + (w1 / vertex_b.pos.z) + (w2 / vertex_c.pos.z));
+                    z *= triangle_normal_inversed ? 1 : -1;
+
+                    // Interpolate color
+                    float r = (w0 * vertex_a.rgb.x + w1 * vertex_b.rgb.x + w2 * vertex_c.rgb.x);
+                    float g = (w0 * vertex_a.rgb.y + w1 * vertex_b.rgb.y + w2 * vertex_c.rgb.y);
+                    float b = (w0 * vertex_a.rgb.z + w1 * vertex_b.rgb.z + w2 * vertex_c.rgb.z);
+
+                    // If point has a smaller z (in front) than previous point in this position
+                    Vec2i pixel_position((int)(y * img_height), (int)(x * img_width));
+                    if (z_buffer[pixel_position.x][pixel_position.y] >= z) {
+                        // Overwrite buffer and push point
+                        z_buffer[pixel_position.x][pixel_position.y] = z;
                         tri_points.push_back((Vertex){.pos = p, .rgb = {r, g, b}});
                     }
                 }
@@ -196,26 +192,26 @@ int main(int argc, char **argv) {
     std::vector<Vec3<Vertex>> triangles;
 
     // Read in cow.h vertices
-    for (uint i = 0; i < ntris; ++i) {
-        Vec3<float> &v0 = vertices[nvertices[i * 3]];
-        Vec3<float> &v1 = vertices[nvertices[i * 3 + 1]];
-        Vec3<float> &v2 = vertices[nvertices[i * 3 + 2]];
+    // for (uint i = 0; i < ntris; ++i) {
+    //     Vec3<float> &v0 = vertices[nvertices[i * 3]];
+    //     Vec3<float> &v1 = vertices[nvertices[i * 3 + 1]];
+    //     Vec3<float> &v2 = vertices[nvertices[i * 3 + 2]];
 
-        Vertex vertex_0 =
-            (Vertex){.pos = v0,
-                     .rgb = {(float)rand() / (float)RAND_MAX, (float)rand() / (float)RAND_MAX,
-                             (float)rand() / (float)RAND_MAX}};
-        Vertex vertex_1 =
-            (Vertex){.pos = v1,
-                     .rgb = {(float)rand() / (float)RAND_MAX, (float)rand() / (float)RAND_MAX,
-                             (float)rand() / (float)RAND_MAX}};
-        Vertex vertex_2 =
-            (Vertex){.pos = v2,
-                     .rgb = {(float)rand() / (float)RAND_MAX, (float)rand() / (float)RAND_MAX,
-                             (float)rand() / (float)RAND_MAX}};
+    //     Vertex vertex_0 =
+    //         (Vertex){.pos = v0,
+    //                  .rgb = {(float)rand() / (float)RAND_MAX, (float)rand() / (float)RAND_MAX,
+    //                          (float)rand() / (float)RAND_MAX}};
+    //     Vertex vertex_1 =
+    //         (Vertex){.pos = v1,
+    //                  .rgb = {(float)rand() / (float)RAND_MAX, (float)rand() / (float)RAND_MAX,
+    //                          (float)rand() / (float)RAND_MAX}};
+    //     Vertex vertex_2 =
+    //         (Vertex){.pos = v2,
+    //                  .rgb = {(float)rand() / (float)RAND_MAX, (float)rand() / (float)RAND_MAX,
+    //                          (float)rand() / (float)RAND_MAX}};
 
-        triangles.push_back(Vec3<Vertex>(vertex_0, vertex_1, vertex_2));
-    }
+    //     triangles.push_back(Vec3<Vertex>(vertex_0, vertex_1, vertex_2));
+    // }
 
     // Use custom triangles
 
@@ -233,64 +229,62 @@ int main(int argc, char **argv) {
 
     // CUBE
 
-    // // back
-    // triangles.push_back({
-    //     (Vertex){.pos = Vec3<float>(0, 0, -1), .rgb = Vec3<float>(1, 0, 0)},
-    //     (Vertex){.pos = Vec3<float>(0, 1, -1), .rgb = Vec3<float>(1, 0, 0)},
-    //     (Vertex){.pos = Vec3<float>(1, 0, -1), .rgb = Vec3<float>(1, 0, 0)},
-    // });
-    // triangles.push_back({
-    //     (Vertex){.pos = Vec3<float>(0, 1, -1), .rgb = Vec3<float>(1, 0, 0)},
-    //     (Vertex){.pos = Vec3<float>(1, 1, -1), .rgb = Vec3<float>(1, 0, 0)},
-    //     (Vertex){.pos = Vec3<float>(1, 0, -1), .rgb = Vec3<float>(1, 0, 0)},
-    // });
+    // back
+    triangles.push_back({
+        (Vertex){.pos = Vec3<float>(0, 0, -1), .rgb = Vec3<float>(1, 0, 0)},
+        (Vertex){.pos = Vec3<float>(0, 1, -1), .rgb = Vec3<float>(1, 0, 0)},
+        (Vertex){.pos = Vec3<float>(1, 0, -1), .rgb = Vec3<float>(1, 0, 0)},
+    });
+    triangles.push_back({
+        (Vertex){.pos = Vec3<float>(0, 1, -1), .rgb = Vec3<float>(1, 0, 0)},
+        (Vertex){.pos = Vec3<float>(1, 1, -1), .rgb = Vec3<float>(1, 0, 0)},
+        (Vertex){.pos = Vec3<float>(1, 0, -1), .rgb = Vec3<float>(1, 0, 0)},
+    });
 
-    // // left
-    // triangles.push_back({
-    //     (Vertex){.pos = Vec3<float>(0, 1, -1), .rgb = Vec3<float>(1, 0, 1)},
-    //     (Vertex){.pos = Vec3<float>(0, 0, -1), .rgb = Vec3<float>(1, 0, 1)},
-    //     (Vertex){.pos = Vec3<float>(0, 0, 0), .rgb = Vec3<float>(1, 0, 1)},
+    // left
+    triangles.push_back({
+        (Vertex){.pos = Vec3<float>(0, 1, -1), .rgb = Vec3<float>(1, 0, 1)},
+        (Vertex){.pos = Vec3<float>(0, 0, -1), .rgb = Vec3<float>(1, 0, 1)},
+        (Vertex){.pos = Vec3<float>(0, 0, 0), .rgb = Vec3<float>(1, 0, 1)},
 
-    // });
-    // triangles.push_back({
-    //     (Vertex){.pos = Vec3<float>(0, 1, 0), .rgb = Vec3<float>(1, 0, 1)},
-    //     (Vertex){.pos = Vec3<float>(0, 1, -1), .rgb = Vec3<float>(1, 0, 1)},
-    //     (Vertex){.pos = Vec3<float>(0, 0, 0), .rgb = Vec3<float>(1, 0, 1)},
+    });
+    triangles.push_back({
+        (Vertex){.pos = Vec3<float>(0, 1, 0), .rgb = Vec3<float>(1, 0, 1)},
+        (Vertex){.pos = Vec3<float>(0, 1, -1), .rgb = Vec3<float>(1, 0, 1)},
+        (Vertex){.pos = Vec3<float>(0, 0, 0), .rgb = Vec3<float>(1, 0, 1)},
 
-    // });
+    });
 
-    // // right
-    // triangles.push_back({
-    //     (Vertex){.pos = Vec3<float>(1, 0, 0), .rgb = Vec3<float>(1, 0, 1)},
-    //     (Vertex){.pos = Vec3<float>(1, 0, -1), .rgb = Vec3<float>(0, 1, 1)},
-    //     (Vertex){.pos = Vec3<float>(1, 1, -1), .rgb = Vec3<float>(0, 0, 1)},
-    // });
+    // right
+    triangles.push_back({
+        (Vertex){.pos = Vec3<float>(1, 0, 0), .rgb = Vec3<float>(1, 0, 1)},
+        (Vertex){.pos = Vec3<float>(1, 0, -1), .rgb = Vec3<float>(0, 1, 1)},
+        (Vertex){.pos = Vec3<float>(1, 1, -1), .rgb = Vec3<float>(0, 0, 1)},
+    });
 
-    // triangles.push_back({
-    //     (Vertex){.pos = Vec3<float>(1, 1, -1), .rgb = Vec3<float>(0, 0, 1)},
-    //     (Vertex){.pos = Vec3<float>(1, 1, 0), .rgb = Vec3<float>(0, 1, 1)},
-    //     (Vertex){.pos = Vec3<float>(1, 0, 0), .rgb = Vec3<float>(1, 0, 1)},
+    triangles.push_back({
+        (Vertex){.pos = Vec3<float>(1, 1, -1), .rgb = Vec3<float>(0, 0, 1)},
+        (Vertex){.pos = Vec3<float>(1, 1, 0), .rgb = Vec3<float>(0, 1, 1)},
+        (Vertex){.pos = Vec3<float>(1, 0, 0), .rgb = Vec3<float>(1, 0, 1)},
 
-    // });
+    });
 
-    // // bottom
-    // triangles.push_back({
-    //     (Vertex){.pos = Vec3<float>(0, 0, 0), .rgb = Vec3<float>(0, 1, 1)},
-    //     (Vertex){.pos = Vec3<float>(1, 0, -1), .rgb = Vec3<float>(0, 1, 1)},
-    //     (Vertex){.pos = Vec3<float>(1, 0, 0), .rgb = Vec3<float>(0, 1, 1)},
-    // });
+    // bottom
+    triangles.push_back({
+        (Vertex){.pos = Vec3<float>(0, 0, 0), .rgb = Vec3<float>(0, 1, 1)},
+        (Vertex){.pos = Vec3<float>(1, 0, -1), .rgb = Vec3<float>(0, 1, 1)},
+        (Vertex){.pos = Vec3<float>(1, 0, 0), .rgb = Vec3<float>(0, 1, 1)},
+    });
 
-    // triangles.push_back({
-    //     (Vertex){.pos = Vec3<float>(0, 0, 0), .rgb = Vec3<float>(0, 1, 1)},
-    //     (Vertex){.pos = Vec3<float>(0, 0, -1), .rgb = Vec3<float>(0, 1, 1)},
-    //     (Vertex){.pos = Vec3<float>(1, 0, -1), .rgb = Vec3<float>(0, 1, 1)},
+    triangles.push_back({
+        (Vertex){.pos = Vec3<float>(0, 0, 0), .rgb = Vec3<float>(0, 1, 1)},
+        (Vertex){.pos = Vec3<float>(0, 0, -1), .rgb = Vec3<float>(0, 1, 1)},
+        (Vertex){.pos = Vec3<float>(1, 0, -1), .rgb = Vec3<float>(0, 1, 1)},
 
-    // });
-
-    Vec3<unsigned char> *frameBuffer = new Vec3<unsigned char>[image_width * image_height];
+    });
 
     for (uint32_t i = 0; i < image_width * image_height; ++i)
-        frameBuffer[i] = Vec3<unsigned char>(255);
+        frame_buffer[i] = Vec3<unsigned char>(255);
 
     for (int i = 0; i < image_height; i++) {
         for (int j = 0; j < image_width; j++) {
@@ -323,10 +317,8 @@ int main(int argc, char **argv) {
             bool out_of_bounds;
             std::tie(p_r, out_of_bounds) = pointNormalToRaster(p.pos);
             if (!out_of_bounds) {
-                frameBuffer[p_r.x + p_r.y * image_height] =
+                frame_buffer[p_r.x + p_r.y * image_height] =
                     Vec3<unsigned char>(255 * p.rgb.x, 255 * p.rgb.y, 255 * p.rgb.z);
-            } else {
-                std::cout << "OUT OF BOUNDS!" << std::endl;
             }
         }
     }
@@ -334,10 +326,10 @@ int main(int argc, char **argv) {
     std::ofstream ofs;
     ofs.open("./output.ppm");
     ofs << "P6\n" << image_width << " " << image_height << "\n255\n";
-    ofs.write((char *)frameBuffer, image_width * image_height * 3);
+    ofs.write((char *)frame_buffer, image_width * image_height * 3);
     ofs.close();
 
-    delete[] frameBuffer;
+    delete[] frame_buffer;
 
     return 0;
 }
