@@ -39,3 +39,7 @@
 
 # mac
 .DS_STORE
+
+# output
+output.ppm
+main

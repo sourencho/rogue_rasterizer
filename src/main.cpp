@@ -161,9 +161,9 @@ std::vector<Vertex> trianglePoints(Vec3<Vertex> triangle, uint32_t img_width, ui
                     w0 /= area;
                     w1 /= area;
                     w2 /= area;
+
                     float z =
                         1 / ((w0 / vertex_a.pos.z) + (w1 / vertex_b.pos.z) + (w2 / vertex_c.pos.z));
-                    z *= triangle_normal_inversed ? 1 : -1;
 
                     // Interpolate color
                     float r = (w0 * vertex_a.rgb.x + w1 * vertex_b.rgb.x + w2 * vertex_c.rgb.x);
@@ -201,6 +201,20 @@ int main(int argc, char **argv) {
     scratch::loader::loadGeoFile(argv[1], ntris, vertices, st, nvertices);
     fprintf(stderr, "Geometry file read ok!\n");
 
+    // Assign random color values to vertices
+    std::unique_ptr<Vec3f[]> colors = std::unique_ptr<Vec3f[]>(new Vec3f[ntris * 3]);
+    for (uint i = 0; i < ntris; ++i) {
+        colors[nvertices[i * 3]] =
+            Vec3f((float)rand() / (float)RAND_MAX, (float)rand() / (float)RAND_MAX,
+                  (float)rand() / (float)RAND_MAX);
+        colors[nvertices[i * 3 + 1]] =
+            Vec3f((float)rand() / (float)RAND_MAX, (float)rand() / (float)RAND_MAX,
+                  (float)rand() / (float)RAND_MAX);
+        colors[nvertices[i * 3 + 2]] =
+            Vec3f((float)rand() / (float)RAND_MAX, (float)rand() / (float)RAND_MAX,
+                  (float)rand() / (float)RAND_MAX);
+    }
+
     std::vector<Vec3<Vertex>> triangles;
 
     // Create list of triangles
@@ -209,18 +223,13 @@ int main(int argc, char **argv) {
         Vec3<float> &v1 = vertices[nvertices[i * 3 + 1]];
         Vec3<float> &v2 = vertices[nvertices[i * 3 + 2]];
 
-        Vertex vertex_0 =
-            (Vertex){.pos = v0,
-                     .rgb = {(float)rand() / (float)RAND_MAX, (float)rand() / (float)RAND_MAX,
-                             (float)rand() / (float)RAND_MAX}};
-        Vertex vertex_1 =
-            (Vertex){.pos = v1,
-                     .rgb = {(float)rand() / (float)RAND_MAX, (float)rand() / (float)RAND_MAX,
-                             (float)rand() / (float)RAND_MAX}};
-        Vertex vertex_2 =
-            (Vertex){.pos = v2,
-                     .rgb = {(float)rand() / (float)RAND_MAX, (float)rand() / (float)RAND_MAX,
-                             (float)rand() / (float)RAND_MAX}};
+        Vec3<float> &c0 = colors[nvertices[i * 3]];
+        Vec3<float> &c1 = colors[nvertices[i * 3 + 1]];
+        Vec3<float> &c2 = colors[nvertices[i * 3 + 2]];
+
+        Vertex vertex_0 = (Vertex){.pos = v0, .rgb = c0};
+        Vertex vertex_1 = (Vertex){.pos = v1, .rgb = c1};
+        Vertex vertex_2 = (Vertex){.pos = v2, .rgb = c2};
 
         triangles.push_back(Vec3<Vertex>(vertex_0, vertex_1, vertex_2));
     }
