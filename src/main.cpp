@@ -29,11 +29,11 @@ Vec3<unsigned char> *frame_buffer = new Vec3<unsigned char>[image_width * image_
 const Vec2<float> canvas_size =
     Vec2<float>(2. * tan(alpha) * near_clip, 2. * tan(beta) * near_clip);
 
-Vec3f pointGlobalToNormal(Vec3f point_global, float near_clip, Vec2<float> canvas_size,
+Vec3f pointGlobalToNormal(const Vec3f &point_global, float near_clip, Vec2<float> canvas_size,
                           uint32_t image_width, uint32_t image_height) {
 
     // translate global point via camera position
-    Vec3f point_global_translated = point_global - camera_position;
+    Vec3<float> point_global_translated = point_global - camera_position;
 
     float sx = sin(camera_orientation.x);
     float sy = sin(camera_orientation.y);
@@ -53,13 +53,13 @@ Vec3f pointGlobalToNormal(Vec3f point_global, float near_clip, Vec2<float> canva
                sx * (cz * point_global_translated.y - sz * point_global_translated.x);
 
     // Skipping camera transformation
-    Vec3f point_camera_pos = Vec3f(dx, dy, dz);
+    Vec3<float> point_camera = Vec3<float>(dx, dy, dz);
 
     // Convert to screen pos
-    Vec3f point_screen_pos;
-    point_screen_pos.x = near_clip * point_camera_pos.x / -point_camera_pos.z;
-    point_screen_pos.y = near_clip * point_camera_pos.y / -point_camera_pos.z;
-    point_screen_pos.z = -point_camera_pos.z;
+    Vec3<float> point_screen;
+    point_screen.x = near_clip * point_camera.x / -point_camera.z;
+    point_screen.y = near_clip * point_camera.y / -point_camera.z;
+    point_screen.z = -point_camera.z;
 
     // Convert to NDC
     float t = canvas_size.y / 2.f;
@@ -67,16 +67,16 @@ Vec3f pointGlobalToNormal(Vec3f point_global, float near_clip, Vec2<float> canva
     float l = -canvas_size.x / 2.f;
     float r = canvas_size.x / 2.f;
 
-    Vec3f point_ndc_pos;
-    point_ndc_pos.x = (2.f * point_screen_pos.x / (r - l)) - ((r + l) / (r - l));
-    point_ndc_pos.y = (2.f * point_screen_pos.y / (t - b)) - ((t + b) / (t - b));
-    point_ndc_pos.z = point_screen_pos.z;
+    Vec3<float> point_ndc;
+    point_ndc.x = (2.f * point_screen.x / (r - l)) - ((r + l) / (r - l));
+    point_ndc.y = (2.f * point_screen.y / (t - b)) - ((t + b) / (t - b));
+    point_ndc.z = point_screen.z;
 
     // Convert to [0,1) normal space
-    Vec3f point_norm_pos;
-    point_norm_pos.x = (point_ndc_pos.x + 1.) / 2.;
-    point_norm_pos.y = (point_ndc_pos.y + 1.) / 2.;
-    point_norm_pos.z = point_ndc_pos.z;
+    Vec3<float> point_norm_pos;
+    point_norm_pos.x = (point_ndc.x + 1.) / 2.;
+    point_norm_pos.y = (point_ndc.y + 1.) / 2.;
+    point_norm_pos.z = point_ndc.z;
 
     return point_norm_pos;
 }
@@ -104,7 +104,8 @@ float edgeFunction(const Vec3f &a, const Vec3f &b, const Vec3f &c) {
 /**
  * Returns the pixels inside a triangle in [0, 1) normal coordinates.
  */
-std::vector<Vertex> trianglePoints(Vec3<Vertex> triangle, uint32_t img_width, uint32_t img_height) {
+std::vector<Vertex> trianglePoints(const Vec3<Vertex> &triangle, uint32_t img_width,
+                                   uint32_t img_height) {
     // Bounding box
     Vec2<float> top_left, bottom_right;
     top_left.x = std::min(std::min(triangle[0].pos.x, triangle[1].pos.x), triangle[2].pos.x);
@@ -134,15 +135,14 @@ std::vector<Vertex> trianglePoints(Vec3<Vertex> triangle, uint32_t img_width, ui
     for (float x = start_x; x <= bottom_right.x; x += pixel_width) {
         for (float y = start_y; y <= top_left.y; y += pixel_height) {
 
-            Vec3f AB = Vec3f(triangle[1].pos.x, triangle[1].pos.y, 0) +
-                       Vec3f(-triangle[0].pos.x, -triangle[0].pos.y, 0);
-            Vec3f BC = Vec3f(triangle[2].pos.x, triangle[2].pos.y, 0) +
-                       Vec3f(-triangle[1].pos.x, -triangle[1].pos.y, 0);
-
             Vec3f p(x, y, triangle[0].pos.z);
 
             // We must rotate counter clockwise over the triangle for the edge function if the
             // normal is inversed
+            const Vec3f &AB = Vec3f(triangle[1].pos.x, triangle[1].pos.y, 0) +
+                              Vec3f(-triangle[0].pos.x, -triangle[0].pos.y, 0);
+            const Vec3f &BC = Vec3f(triangle[2].pos.x, triangle[2].pos.y, 0) +
+                              Vec3f(-triangle[1].pos.x, -triangle[1].pos.y, 0);
             bool triangle_normal_inversed = AB.crossProduct(BC).z <= 0.f;
             const Vertex &vertex_a = triangle_normal_inversed ? triangle[0] : triangle[1];
             const Vertex &vertex_b = triangle_normal_inversed ? triangle[1] : triangle[0];
@@ -219,13 +219,13 @@ int main(int argc, char **argv) {
 
     // Create list of triangles
     for (uint i = 0; i < ntris; ++i) {
-        Vec3f &v0 = vertices[nvertices[i * 3]];
-        Vec3f &v1 = vertices[nvertices[i * 3 + 1]];
-        Vec3f &v2 = vertices[nvertices[i * 3 + 2]];
+        Vec3<float> &v0 = vertices[nvertices[i * 3]];
+        Vec3<float> &v1 = vertices[nvertices[i * 3 + 1]];
+        Vec3<float> &v2 = vertices[nvertices[i * 3 + 2]];
 
-        Vec3f &c0 = colors[nvertices[i * 3]];
-        Vec3f &c1 = colors[nvertices[i * 3 + 1]];
-        Vec3f &c2 = colors[nvertices[i * 3 + 2]];
+        Vec3<float> &c0 = colors[nvertices[i * 3]];
+        Vec3<float> &c1 = colors[nvertices[i * 3 + 1]];
+        Vec3<float> &c2 = colors[nvertices[i * 3 + 2]];
 
         Vertex vertex_0 = (Vertex){.pos = v0, .rgb = c0};
         Vertex vertex_1 = (Vertex){.pos = v1, .rgb = c1};
@@ -245,25 +245,18 @@ int main(int argc, char **argv) {
     }
 
     for (auto triangle : triangles) {
-        Vec3<Vertex> triangle_normal = {
-            (Vertex){
-                .pos = pointGlobalToNormal(triangle.x.pos, near_clip, canvas_size, image_width,
-                                           image_height),
-                triangle.x.rgb,
-            },
-            (Vertex){
-                .pos = pointGlobalToNormal(triangle.y.pos, near_clip, canvas_size, image_width,
-                                           image_height),
-                .rgb = triangle.y.rgb,
-            },
-            (Vertex){
-                .pos = pointGlobalToNormal(triangle.z.pos, near_clip, canvas_size, image_width,
-                                           image_height),
-                .rgb = triangle.z.rgb,
-            }};
+        // Project triangle vertices to normal space
+        triangle[0].pos =
+            pointGlobalToNormal(triangle[0].pos, near_clip, canvas_size, image_width, image_height);
+        triangle[1].pos =
+            pointGlobalToNormal(triangle[1].pos, near_clip, canvas_size, image_width, image_height);
+        triangle[2].pos =
+            pointGlobalToNormal(triangle[2].pos, near_clip, canvas_size, image_width, image_height);
 
-        auto tri_points = trianglePoints(triangle_normal, image_width, image_height);
+        // Get a list of points to be rendered per triangle
+        std::vector<Vertex> tri_points = trianglePoints(triangle, image_width, image_height);
 
+        // Render points
         for (auto p : tri_points) {
             Vec2<uint32_t> p_r;
             bool out_of_bounds;
