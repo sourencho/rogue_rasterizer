@@ -41,3 +41,4 @@ Text output
 
 - [ ] Perspective correct vertex attribute interpolation (color)
 - [ ] Import color from model instead of assigning random colors
+- [ ] Set output size, camera position/orientation and text character via command line options
