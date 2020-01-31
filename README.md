@@ -10,17 +10,17 @@ Authors: [@hwacha](https://github.com/hwacha) and [@sourenp](https://github.com/
 
 ### Run
 
-Usage
+#### Usage
 ```
 # Usage: ./main <geo_file_path> image/text
 ```
 
-Compile
+#### Compile
 ```bash
 c++  -o main src/main.cpp -std=c++11 -O3 
 ```
 
-Image output
+#### Image output
 ```
 ./main "data/cow.geo" image
 open output.ppm
@@ -29,7 +29,7 @@ open output.ppm
 ![cow output](images/cow.jpg)
 
 
-Text output
+#### Text output
 ```
 ./main "data/cow.geo" text
 ```
