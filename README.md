@@ -43,3 +43,9 @@ open output.ppm
 - [ ] Import color from model instead of assigning random colors
 - [ ] Set output size, camera position/orientation and text character via command line options
 - [ ] Clean up and optimize code
+
+### Resources
+
+- [Scratchapixel tutorials](https://www.scratchapixel.com/)
+- [Scratchapixel code](https://github.com/pgliaskovitis/scratch-a-pixel)
+- 
