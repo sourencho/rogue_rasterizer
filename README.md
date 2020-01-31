@@ -4,7 +4,7 @@ A simple software rasterizer written for learning purposes using the tutorial [S
 
 > Rasterization is the task of taking an image described in a vector graphics format (shapes) and converting it into a raster image (a series of pixels, dots or lines, which, when displayed together, create the image which was represented via shapes).
 
-In this case we are taking as input a shape defined by triangles in 3D cooridnates (.geo file) and coordinates/orientation for the camera and outputting the 2D projection of the camera's perspective as an image (.ppm file) or text (stdout).
+In this case we are taking as input a shape defined by triangles in 3D cooridnates (.geo file) and camera coordinates/orientation and then outputting the 2D projection of the camera's perspective as an image (.ppm file) or text (stdout).
 
 Authors: [@hwacha](https://github.com/hwacha) and [@sourenp](https://github.com/Sourenp)
 
@@ -42,3 +42,4 @@ Text output
 - [ ] Perspective correct vertex attribute interpolation (color)
 - [ ] Import color from model instead of assigning random colors
 - [ ] Set output size, camera position/orientation and text character via command line options
+- [ ] Clean up and optimize code
