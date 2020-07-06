@@ -8,6 +8,8 @@ In this case we are taking as input a shape defined by triangles in 3D cooridnat
 
 Authors: [@hwacha](https://github.com/hwacha) and [@sourenp](https://github.com/Sourenp)
 
+_Note that this code was not written to be particularly optimal or clean since this was mostly an exercise to learn graphics concepts._
+
 ### Run
 
 #### Usage
